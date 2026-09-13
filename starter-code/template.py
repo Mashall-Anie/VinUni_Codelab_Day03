@@ -30,10 +30,7 @@ class ChatbotBaseline:
 
     def query(self, user_input: str) -> str:
         # TODO (Milestone 1): Trả về câu trả lời tĩnh hoặc gọi LLM 1 lượt (không dùng tool)
-        #
-        # Mục tiêu của milestone này là CHO THẤY hạn chế của baseline:
-        # không có tool -> không tra cứu được dữ liệu thật -> chỉ có thể bịa
-        # hoặc từ chối trả lời chính xác.
+       
         if self.api_key:
             try:
                 import google.generativeai as genai
@@ -49,7 +46,6 @@ class ChatbotBaseline:
             except Exception as e:
                 return f"[Chatbot Baseline] Lỗi khi gọi LLM ({e}). Không có tool nên không thể tra cứu dữ liệu thật."
 
-        # Không có API key -> trả lời tĩnh, minh hoạ việc "bịa" hoặc từ chối
         return (
             "[Chatbot Baseline] Xin lỗi, tôi không có quyền truy cập vào dữ liệu "
             "chuyến bay hay thời tiết thời gian thực, nên không thể trả lời chính "
@@ -65,9 +61,7 @@ class ReActAgent:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.trace: List[Dict[str, Any]] = []
 
-    # ------------------------------------------------------------------ #
-    # Helpers
-    # ------------------------------------------------------------------ #
+    
     def _tools_description(self) -> str:
         lines = []
         for tool in TOOL_DEFINITIONS:
@@ -89,7 +83,6 @@ class ReActAgent:
             response = model.generate_content(full_prompt)
             return response.text.strip()
 
-        # ---- Fallback: fake-LLM rule-based cho môi trường offline/test ----
         return self._fake_llm_step(conversation)
 
     def _fake_llm_step(self, conversation: str) -> str:
@@ -122,16 +115,13 @@ class ReActAgent:
     @staticmethod
     def _extract_route(text: str) -> (str, str):
         codes = re.findall(r"\b([A-Z]{3})\b", text.upper())
-        # loại các từ ba chữ cái ngẫu nhiên không phải mã sân bay phổ biến
         known = {"HAN", "SGN", "DAD"}
         found = [c for c in codes if c in known]
         origin = found[0] if len(found) >= 1 else "HAN"
         destination = found[1] if len(found) >= 2 else "SGN"
         return origin, destination
 
-    # ------------------------------------------------------------------ #
-    # Core loop
-    # ------------------------------------------------------------------ #
+    
     def run(self, user_input: str) -> str:
         # TODO 1: Khởi tạo mảng lưu lịch sử conversation / traces
         self.trace = []
@@ -159,7 +149,6 @@ class ReActAgent:
                 "raw_output": llm_output,
             }
 
-            # Nếu Agent đã đưa ra Final Answer -> dừng vòng lặp
             if final_answer and not action_raw:
                 step_record["final_answer"] = final_answer
                 self.trace.append(step_record)
@@ -167,7 +156,6 @@ class ReActAgent:
 
             # TODO 4: Thực thi Tool trong TOOL_MAP nếu có Action
             if action_raw:
-                # ---- Trap 2: Format Drift trong Action JSON ----
                 try:
                     action = json.loads(action_raw)
                     tool_name = action.get("name", "")
@@ -186,7 +174,6 @@ class ReActAgent:
                         )
                     continue
 
-                # ---- Trap 1: KeyError khi gọi Tool (khoảng trắng / viết hoa) ----
                 normalized_tool_name = tool_name.strip().lower()
                 tool_fn = TOOL_MAP.get(normalized_tool_name)
 
@@ -206,7 +193,6 @@ class ReActAgent:
                 self.trace.append(step_record)
                 conversation += observation + "\n"
 
-                # ---- Trap 3: Lặp vô tận khi API/tool lỗi ----
                 is_error = isinstance(result, dict) and "error" in result
                 if is_error:
                     consecutive_tool_errors += 1
@@ -220,12 +206,10 @@ class ReActAgent:
                     )
                 continue
 
-            # Không có Action lẫn Final Answer rõ ràng -> ghi log và dừng vòng lặp
             step_record["observation"] = "Không nhận diện được Action hoặc Final Answer hợp lệ."
             self.trace.append(step_record)
             break
 
-        # Vượt quá số bước tối đa (Milestone 4: Safeguards)
         return {
             "status": "max_iterations_reached",
             "answer": "Không thể hoàn thành trong số bước tối đa.",
@@ -239,7 +223,6 @@ class ReActAgent:
         match = re.search(pattern, text)
         if not match:
             return None
-        # Cắt bớt nếu dòng chứa luôn field khác phía sau (phòng hờ LLM in liền)
         value = match.group(1).strip()
         return value if value else None
 
